@@ -1,0 +1,15 @@
+#!/bin/bash
+
+#SBATCH --job-name=mpmt
+#SBATCH -n 4
+#SBATCH --time=60:00:00
+#SBATCH --mem-per-cpu=2048
+#SBATCH --mail-type=FAIL
+#SBATCH --mail-type=END
+ 
+pip install osmnx
+pip install scipy
+pip install scikit-learn
+pip install geopy
+pip install anytree
+python multiMapMatching_cropped.py Chicago Crimes_-_366.csv  Chicago_1year_nogroup Longitude Latitude 10
