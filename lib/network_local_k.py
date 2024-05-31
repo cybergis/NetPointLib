@@ -1,39 +1,43 @@
-def detectHotspot_matched_prob(prob, G, t=20, m=80, c_code="default", max_distance=4800, global_HS=False, plot=True, show_log=False):
-    """
-    Detects hotspots in a specified area based on the graph G and probability thresholds.
+from hotspot import *
 
-    This function identifies hotspots by analyzing the distribution of matched events within the graph G, considering
-    the spatial probability and temporal thresholds. It can operate in a global or localized context, modifying
-    the graph as necessary to highlight hotspots and potentially de-emphasize non-hotspots areas.
+def Var(G, t, l, pi, n, et):
+    Ltpi = Ltp(et, t)
+    if n == 0:
+        n = 1
+    var = 1/ n * l * Ltpi * (1-Ltpi/l)
+    return var
 
-    Args:
-        prob (tuple): The longitude and latitude coordinates representing the center of analysis.
-        G (networkx.MultiDiGraph): The directed graph representing the street network for hotspot analysis.
-        t (int, optional): Temporal threshold for hotspot analysis. Defaults to 20.
-        m (int, optional): Spatial multiplier for expanding the analysis area. Defaults to 80.
-        c_code (str, optional): Category code or identifier for the analysis. Defaults to "default".
-        max_distance (int, optional): Maximum distance for considering points in the hotspot analysis. Defaults to 4800 meters.
-        global_HS (bool, optional): Flag to determine if the hotspot analysis should be global. Defaults to False.
-        plot (bool, optional): Flag to enable or disable plotting of the hotspot analysis results. Defaults to True.
-        show_log (bool, optional): Flag to enable or disable logging of the process details. Defaults to False.
+def Ktp_grouped(G, t, l, pi, n, matched_index):
+    if n == 0:
+        n = 1
+    return l/(n)*ntpi_grouped(t, pi, G, matched_index)
 
-    Returns:
-        networkx.MultiDiGraph: The modified graph G, with hotspots highlighted based on the analysis.
-    """
-    if(show_log):
-        print(prob)
-    
-    pi = ox.distance.nearest_nodes(G, prob[0], prob[1])
+def ntpi_grouped(t, pi, G,matched_index):
+    count = 0
+    found = []
+    distances, paths = nx.single_source_dijkstra(G,pi,cutoff=t, weight = 'length') #No need to start from scratch every time
+    for p in paths.keys():
+        if p in matched_index and (p not in found):
+            #print(p)
+            #print(p in found)
+            found.append(p)
+            if 'event_count' in G.nodes[p]:
+                count += int(G.nodes[p]['event_count'])
+            else:
+                count += 1
+    return count
+
+def network_local_k(pi, G, wholeN, l, alpha = 0.005, t = 1600, m = 1, global_HS = True, plot = False, show_log = True):
     if(show_log):
         print(pi)
     time1 = time.time()
     if(show_log):
         print("Compute extended-tree")
-    et = extended_shortest_path_tree(pi, G, cutoff = t*m) 
+    et = extended_shortest_path_tree_dict(pi, G, cutoff = t*m) 
     matched_index = list()
     if(show_log):
         print("Start dijkstra's")
-    distances, paths = nx.single_source_dijkstra(G,pi,cutoff=max_distance, weight = 'length') #No need to start from scratch every time
+    distances, paths = nx.single_source_dijkstra(G,pi,cutoff=t, weight = 'length') #No need to start from scratch every time
     for p in paths.keys():
         if p < 0:
             matched_index.append(p)
@@ -44,14 +48,14 @@ def detectHotspot_matched_prob(prob, G, t=20, m=80, c_code="default", max_distan
         timePrep = time.time()
         print("Time for preparation: ", str(timePrep - time1))
     file1 = open("cluster.txt", "a")  # append mode
-    file1.write(str(prob)+ ", ")
+    #file1.write(str(prob)+ ", ")
     if not global_HS:
         H = G.subgraph(list(paths.keys()))
         G = H
     for i in range(1, m+1):
         if show_log:
             print("i = ", i)
-            print("No. of points in range: ", ntpi(t*i, pi, G,matched_index))
+            print("No. of points in range: ", ntpi(t*i, pi, G ,matched_index))
         if ntpi(t*i, pi, G,matched_index) == 0:
             if show_log:
                 print("No event in range, skip")
@@ -62,30 +66,31 @@ def detectHotspot_matched_prob(prob, G, t=20, m=80, c_code="default", max_distan
         ltime = time.time()
         if show_log:
             print("Ltp cal: ", mean)
-        std = Var(G, t * i, pi, wholeN(G), et)**0.5
+        std = Var(G, t * i, l, pi, wholeN, et)**0.5
         sTtime = time.time()
         if show_log:
             print("std cal: ", std)
-        k = Ktp(G, t * i, pi, wholeN(G), matched_index)
+        k = Ktp_grouped(G, t * i, l, pi, wholeN, matched_index)
         ktime = time.time()
         if show_log:
             print("k cal: ",k)
         normalDist = scipy.stats.norm(mean, std)
-        if k >= normalDist.ppf(1-.01):
-            file1.write("1, ")
+        if k >= normalDist.ppf(1-alpha):
             if show_log:
                 print("At ti = ", t*i, " k >upper critical")
             cluster = cluster + 1
-        elif k < normalDist.ppf(.01):
-            file1.write("-1, ")
+            #dic[n] = 1
+            return 1
+        elif k < normalDist.ppf(alpha):
             if show_log:
                 print("At ti = ", t*i, " k <lower critical")
-            cluster = cluster - 1
+            #dic[n] = -1
+            return -1
         else:
-            file1.write("0, ")
             if show_log:
                 print("At ti = ", t*i, " CSR")
-            #cluster = cluster - 1
+            #dic[n] = 0
+            return 0
     time2 = time.time()
     if plot:
         nc = ["r" if (node <0) else "b" for node in G.nodes()]
@@ -98,7 +103,7 @@ def detectHotspot_matched_prob(prob, G, t=20, m=80, c_code="default", max_distan
         else:
             classPath = classPath + "CSR"
         fig, ax = ox.plot_graph(G, node_color=nc, node_size = ns, bgcolor = '#ffffff', save = True, filepath = "./" + classPath + "/" + str(c_code) + "_" + str(t) + "_" + str(prob) + ".jpg")
-        print("Saving result for " + str(prob) + "to " + "./" + classPath + "/" + str(c_code) + "_" + str(t) + "_" + str(prob))
+        #print("Saving result for " + str(prob) + "to " + "./" + classPath + "/" + str(c_code) + "_" + str(t) + "_" + str(prob))
     if show_log:
         print("Total count: ", str(cluster))
     file1.write(str(cluster) + ", "+ str(time2 - time1) + "\n")

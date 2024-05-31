@@ -1166,14 +1166,8 @@ def encode_data_list_grouped(G, data_dir, max_dist, step_size, show_log = False)
         encode_list.append(encode)
     return encode_list, (total_time / file_count)
 def map_events_to_tile_cropped_by_place(place, prob, crimes,  group = False, base_id = 0, show_log = False):
-    #wn = (-118.2730593,34.0532872)
-    #es = (-118.2121635,34.0122962)
-    #p = crimes.iloc[index]
-    #location_point = (p['LAT'], p['LON'])
-    #print(prob)
     wn = (prob[0] - 0.031, prob[1] + 0.031 )
     es = (prob[0] + 0.031, prob[1] - 0.031 )
-    #location_point = (34.0463279, -118.2678461)
     try:
         G=graph_from_bbox_with_place(place, wn[1], es[1], es[0], wn[0], network_type="drive_service", simplify=False)
     except Exception as e:
