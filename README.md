@@ -32,4 +32,4 @@ For example:
 $ python multiMapMatching_cropped.py Chicago Crimes_-_366.csv  Chicago_1year_nogroup Longitude Latitude 10
 ```
 
-Matches the 
+Matches the Crimes_-_366.csv dataset to the Chicago road centerline.
